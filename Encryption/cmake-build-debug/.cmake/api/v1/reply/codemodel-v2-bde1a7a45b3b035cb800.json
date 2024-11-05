@@ -49,8 +49,8 @@
 	"kind" : "codemodel",
 	"paths" : 
 	{
-		"build" : "/home/katharsis/Documents/TEC/Operativos/Proyectos/Encryption/cmake-build-debug",
-		"source" : "/home/katharsis/Documents/TEC/Operativos/Proyectos/Encryption"
+		"build" : "/home/katharsis/Documents/GitHub/occurrence_counter_driver/Encryption/cmake-build-debug",
+		"source" : "/home/katharsis/Documents/GitHub/occurrence_counter_driver/Encryption"
 	},
 	"version" : 
 	{
