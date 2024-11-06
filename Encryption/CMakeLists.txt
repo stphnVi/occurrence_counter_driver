@@ -5,4 +5,6 @@ set(CMAKE_C_STANDARD 11)
 
 add_executable(Encryption main.c
         fieldArithmetic.c
-        fieldArithmetic.h)
+        fieldArithmetic.h
+        protocolDH.c
+        protocolDH.h)
