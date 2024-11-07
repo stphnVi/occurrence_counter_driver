@@ -8,7 +8,6 @@
 #define SPI_CHANNEL 0
 #define SPI_SPEED 500000
 
-// Estructura para almacenar el patrón de una letra
 typedef struct
 {
     char letter;        // Letra
@@ -26,55 +25,77 @@ void max7219_send(uint8_t reg, uint8_t data)
 
 // Mapeo
 Letter letters[] = {
-    {'H', {0x82, 0x82, 0xFE, 0x82, 0x82, 0x82, 0x82, 0x82}},
-    {'O', {0xFC, 0x82, 0x82, 0x82, 0x82, 0x82, 0x82, 0xFC}},
-    {'L', {0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xFC}},
-    {'A', {0x3C, 0x22, 0x41, 0x41, 0x7F, 0x41, 0x41, 0x41}}};
+    {'H', {0xc3, 0xc3, 0xc3, 0xff, 0xff, 0xc3, 0xc3, 0xc3}},
+    {'O', {0x3c, 0x7e, 0xc3, 0xc3, 0xc3, 0xc3, 0x7e, 0x3c}},
+    {'L', {0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xc0, 0xff, 0x7e}},
+    {'A', {0x3c, 0x7e, 0xc3, 0xc3, 0xff, 0xff, 0xc3, 0xc3}},
+    {'T', {0xff, 0xff, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18}},
+    {'E', {0x7f, 0xff, 0xc0, 0xf8, 0xf8, 0xc0, 0xff, 0x7f}},
+    {'D', {0xfc, 0xfe, 0xc7, 0xc3, 0xc3, 0xc7, 0xfe, 0xfc}},
+    {'R', {0xf8, 0xfc, 0xc6, 0xfe, 0xfc, 0xce, 0xc7, 0xc3}},
+    {'I', {0xff, 0xff, 0x18, 0x18, 0x18, 0x18, 0xff, 0xff}},
+    {'B', {0xf8, 0xfc, 0xce, 0xfe, 0xfc, 0xc6, 0xfe, 0xfc}}};
 
 void display_letter(uint8_t *pattern)
 {
     for (int row = 0; row < 8; row++)
     {
+
         max7219_send(row + 1, pattern[row]);
     }
 }
 
-// Función para animar la palabra "HOLA" con letras desplazándose
-void animate_text()
+void animate_text(const char *text)
 {
-    int length = sizeof(letters) / sizeof(letters[0]); // Número de letras en el array
-
-    int offset;
-    int screen_width = 8; // MAX7219 tiene 8 columnas
-    int num_leds = 8;     // Número de LEDs
+    int length = strlen(text); // Longitud del string a animar
+    int screen_width = 8;      // MAX7219 tiene 8 columnas
+    int num_leds = 8;          // Número de LEDs
 
     while (1)
     {
-        // Desplazar cada letra de "HOLA"
+        // Recorre cada carácter en el texto dado (por ejemplo, "HOLA")
         for (int i = 0; i < length; i++)
         {
+            char current_char = text[i];
 
-            for (offset = -num_leds; offset < num_leds + screen_width; offset++)
+            // Buscar el índice del carácter en el mapeo de letras
+            int letter_index = -1;
+            for (int j = 0; j < sizeof(letters) / sizeof(letters[0]); j++)
             {
-                uint8_t shifted_letter[8] = {0};
-
-                for (int row = 0; row < 8; row++)
+                if (letters[j].letter == current_char)
                 {
-                    if (offset >= 0 && offset < num_leds)
+                    letter_index = j;
+                    break;
+                }
+            }
+
+            // mapeon
+            if (letter_index != -1)
+            {
+                // Desplaza izquierda hacia la derecha
+                for (int offset = -screen_width; offset <= num_leds; offset++)
+                {
+                    uint8_t shifted_letter[8] = {0};
+
+                    for (int row = 0; row < 8; row++)
                     {
-                        shifted_letter[row] = letters[i].pattern[row] >> offset;
+                        if (offset < 0)
+                        {
+                            // desde el borde izquierdo
+                            shifted_letter[row] = letters[letter_index].pattern[row] << (-offset);
+                        }
+                        else
+                        {
+                            // desplaza hacia la derecha
+                            shifted_letter[row] = letters[letter_index].pattern[row] >> offset;
+                        }
                     }
-                    else if (offset < 0)
-                    {
-                        shifted_letter[row] = 0;
-                    }
-                    else
-                    {
-                        shifted_letter[row] = 0;
-                    }
+
+                    display_letter(shifted_letter);
+                    delay(100); // Controla la velocidad de desplazamiento
                 }
 
-                display_letter(shifted_letter);
+                // Retardo entre letras
                 delay(100);
             }
         }
@@ -103,7 +124,7 @@ int main()
     max7219_send(0x0C, 0x01); // Salir del modo de apagado
     max7219_send(0x0F, 0x00); // prueba del display: apagada
 
-    animate_text();
+    animate_text("TOLEBRIO");
 
     return 0;
 }
