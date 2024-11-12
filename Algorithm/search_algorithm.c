@@ -2,15 +2,7 @@
 #include <stdlib.h> 
 #include <string.h> 
 #include <ctype.h> 
- 
-#define MAX_WORD_LEN 50 
-#define MAX_PART_SIZE 1024 * 1024  // 1 MB maximum size per part 
- 
-// Structure to hold word frequency 
-typedef struct { 
-    char word[MAX_WORD_LEN]; 
-    int count; 
-} WordFreq; 
+#include "search_algorithm.h"
  
 // Helper function to make a word lowercase 
 void toLowercase(char *str) { 
@@ -110,12 +102,12 @@ char **splitFileToStrings(const char *filename, int *numParts, int *outPartSizes
  
     *numParts = (fileSize + MAX_PART_SIZE - 1) / MAX_PART_SIZE; 
  
-    char **partsArray = malloc(*numParts * sizeof(char *)); 
-    if (!partsArray) { 
-        perror("Memory allocation for parts array failed"); 
-        fclose(file); 
-        return NULL; 
-    } 
+    char **partsArray = (char **)malloc(*numParts * sizeof(char *));
+    if (!partsArray) {
+        perror("Memory allocation for parts array failed");
+        fclose(file);
+        return NULL;
+    }
  
     for (int i = 0; i < *numParts; i++) { 
         long currentPartSize = (i < *numParts - 1) ? MAX_PART_SIZE : (fileSize - i * MAX_PART_SIZE); 
@@ -138,22 +130,16 @@ char **splitFileToStrings(const char *filename, int *numParts, int *outPartSizes
     return partsArray; 
 } 
  
-int main(int argc, char **argv) { 
-    if (argc < 2) { 
-        printf("Usage: %s <filename>\n", argv[0]); 
-        return 1; 
-    } 
- 
-    const char *filename = argv[1]; 
-    int
-numParts; 
-    int *partSizes = malloc(MAX_PART_SIZE * sizeof(int)); 
+int main() { 
+    int numParts; 
+
+    int *partSizes = (int *)malloc(MAX_PART_SIZE * sizeof(int));
     if (!partSizes) { 
         perror("Memory allocation for part sizes failed"); 
         return 1; 
     } 
  
-    char **textParts = splitFileToStrings(filename, &numParts, partSizes); 
+    char **textParts = splitFileToStrings(FILENAME, &numParts, partSizes); 
     if (!textParts) { 
         free(partSizes); 
         return 1; 
