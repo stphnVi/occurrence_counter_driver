@@ -7,7 +7,7 @@
 #define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora
 #define BAUDRATE B9600               // baudios
 
-int main()
+int draw(char[] message)
 {
     int serial_port = open(DEVICE, O_RDWR);
 
@@ -46,7 +46,6 @@ int main()
     }
 
     // Enviar datos
-    char message[] = "TOLEDO\n";
     int message_len = sizeof(message) - 1;
     int bytes_written = write(serial_port, message, message_len);
 
