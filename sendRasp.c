@@ -4,8 +4,8 @@
 #include <unistd.h>
 #include <termios.h>
 
-#define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora (cambia si es necesario)
-#define BAUDRATE B9600               // Velocidad de baudios
+#define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora
+#define BAUDRATE B9600               // baudios
 
 int main()
 {
@@ -31,12 +31,12 @@ int main()
     tty.c_cflag &= ~PARENB; // Sin paridad
     tty.c_cflag &= ~CSTOPB; // 1 bit de stop
     tty.c_cflag &= ~CSIZE;
-    tty.c_cflag |= CS8;                             // 8 bits de datos
-                                                    // tty.c_cflag &= ~CRTSCTS; // Deshabilitar control de flujo por hardware
-    tty.c_cflag |= CREAD | CLOCAL;                  // Habilitar la lectura y establecer la conexión local
-    tty.c_iflag &= ~(IXON | IXOFF | IXANY);         // Sin control de flujo por software
-    tty.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG); // Deshabilitar entrada canónica y retroalimentación
-    tty.c_oflag &= ~OPOST;                          // Deshabilitar salida procesada
+    tty.c_cflag |= CS8;
+
+    tty.c_cflag |= CREAD | CLOCAL;
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+    tty.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+    tty.c_oflag &= ~OPOST;
 
     if (tcsetattr(serial_port, TCSANOW, &tty) != 0)
     {
