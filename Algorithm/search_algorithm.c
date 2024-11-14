@@ -154,32 +154,94 @@ char **splitFileToStrings(const char *filename, int size, int *outPartSizes) {
 
 int main(int argc, char *argv[]) {
     int rank, size;
+
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    int numParts;
-    int *partSizes = (int *)malloc(size * sizeof(int));
-    char **textParts;
-
-    if (rank == 0) {
-        textParts = splitFileToStrings(FILENAME, size, partSizes);
-        for (int dest = 1; dest < size; dest++) {
-            MPI_Send(&partSizes[dest], 1, MPI_INT, dest, 0, MPI_COMM_WORLD);
-            MPI_Send(textParts[dest], partSizes[dest], MPI_CHAR, dest, 0, MPI_COMM_WORLD);
-        }
-    } else {
-        MPI_Recv(&partSizes[rank], 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        textParts = (char **)malloc(sizeof(char *));
-        textParts[0] = (char *)malloc((partSizes[rank] + 1) * sizeof(char));
-        MPI_Recv(textParts[0], partSizes[rank], MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        textParts[0][partSizes[rank]] = '\0';
+    int numParts = size;
+    int *partSizes = malloc(numParts * sizeof(int));
+    if (!partSizes) {
+        perror("Memory allocation for part sizes failed");
+        MPI_Finalize();
+        return 1;
     }
 
-    processPart(textParts[rank == 0 ? 0 : 0]);
-    gatherAndFindMostFrequentWord(rank, size);
+    char **textParts = NULL;
+    if (rank == 0) {
+        textParts = splitFileToStrings(FILENAME, numParts, partSizes);
+        if (!textParts) {
+            free(partSizes);
+            MPI_Finalize();
+            return 1;
+        }
+    }
 
-    // Cleanup omitted for brevity
+    // Distribuir partes de texto
+    int localPartSize;
+    char *localText = NULL;
+
+    if (rank == 0) {
+        localPartSize = partSizes[rank];
+        localText = textParts[rank];
+
+        for (int i = 1; i < size; i++) {
+            //Encriptar
+            MPI_Send(&partSizes[i], 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+            MPI_Send(textParts[i], partSizes[i], MPI_CHAR, i, 0, MPI_COMM_WORLD);
+        }
+    } else {
+        MPI_Recv(&localPartSize, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        localText = malloc(localPartSize + 1);
+        MPI_Recv(localText, localPartSize, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        //Traducir
+        localText[localPartSize] = '\0';
+    }
+
+    // Procesar la parte de texto localmente
+    processPart(localText);
+
+    // Enviar resultados locales al proceso maestro
+    if (rank != 0) {
+        for (int i = 0; i < HASH_SIZE; i++) {
+            if (hashTable[i] != NULL) {
+                MPI_Send(hashTable[i]->word, MAX_WORD_LEN, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+                MPI_Send(&hashTable[i]->count, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            }
+        }
+    } else {
+        WordFreq globalHashTable[HASH_SIZE] = {0};
+
+        // Recibir datos de otros procesos y combinarlos
+        for (int i = 1; i < size; i++) {
+            char word[MAX_WORD_LEN];
+            int count;
+
+            while (1) {
+                MPI_Recv(word, MAX_WORD_LEN, MPI_CHAR, i, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                if (strcmp(word, "END") == 0) break;
+
+                MPI_Recv(&count, 1, MPI_INT, i, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                addWordToGlobalHash(globalHashTable, word, count);
+            }
+        }
+
+        // Encontrar la palabra más frecuente globalmente
+        char mostFreqWord[MAX_WORD_LEN];
+        int maxCount = 0;
+        for (int i = 0; i < HASH_SIZE; i++) {
+            if (globalHashTable[i].count > maxCount) {
+                maxCount = globalHashTable[i].count;
+                strcpy(mostFreqWord, globalHashTable[i].word);
+            }
+        }
+        printf("Most frequent word: '%s' (appears %d times)\n", mostFreqWord, maxCount);
+    }
+
+    cleanupHashTable();
+    free(localText);
+    free(partSizes);
+    if (rank == 0) free(textParts);
 
     MPI_Finalize();
     return 0;
