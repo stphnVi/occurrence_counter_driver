@@ -1,51 +1,64 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <termios.h>
-#include <errno.h>
 
-int configurar_serial(const char *puerto_serial) {
-    int serial_fd = open(puerto_serial, O_RDWR | O_NOCTTY | O_NDELAY);
-    if (serial_fd == -1) {
-        perror("Error abriendo el puerto serial");
-        return -1;
-    }
+#define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora (cambia si es necesario)
+#define BAUDRATE B9600               // Velocidad de baudios
 
-    struct termios opciones;
-    tcgetattr(serial_fd, &opciones);
-    cfsetispeed(&opciones, B9600);
-    cfsetospeed(&opciones, B9600);
-    opciones.c_cflag |= (CLOCAL | CREAD);
-    opciones.c_cflag &= ~PARENB;
-    opciones.c_cflag &= ~CSTOPB;
-    opciones.c_cflag &= ~CSIZE;
-    opciones.c_cflag |= CS8;
-    opciones.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    opciones.c_iflag &= ~(IXON | IXOFF | IXANY);
-    opciones.c_oflag &= ~OPOST;
-    tcsetattr(serial_fd, TCSANOW, &opciones);
+int main()
+{
+    int serial_port = open(DEVICE, O_RDWR);
 
-    return serial_fd;
-}
-
-int main() {
-    const char *puerto = "/dev/ttyRaspberryPi";  // Cambia el puerto según tu sistema
-    int serial_fd = configurar_serial(puerto);
-    if (serial_fd == -1) {
+    if (serial_port < 0)
+    {
+        perror("Error al abrir el puerto serial");
         return 1;
     }
 
-    const char *mensaje = "Hola Raspberry Pi";
-    int bytes_enviados = write(serial_fd, mensaje, strlen(mensaje));
-    if (bytes_enviados < 0) {
-        perror("Error enviando mensaje");
-        close(serial_fd);
+    struct termios tty;
+    if (tcgetattr(serial_port, &tty) != 0)
+    {
+        perror("Error al obtener los atributos del puerto serial");
+        close(serial_port);
         return 1;
     }
-    printf("Mensaje enviado: %s\n", mensaje);
 
-    close(serial_fd);
+    // Configuración de los parámetros del puerto serial
+    cfsetospeed(&tty, BAUDRATE);
+    cfsetispeed(&tty, BAUDRATE);
+    tty.c_cflag &= ~PARENB; // Sin paridad
+    tty.c_cflag &= ~CSTOPB; // 1 bit de stop
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;                             // 8 bits de datos
+                                                    // tty.c_cflag &= ~CRTSCTS; // Deshabilitar control de flujo por hardware
+    tty.c_cflag |= CREAD | CLOCAL;                  // Habilitar la lectura y establecer la conexión local
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);         // Sin control de flujo por software
+    tty.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG); // Deshabilitar entrada canónica y retroalimentación
+    tty.c_oflag &= ~OPOST;                          // Deshabilitar salida procesada
+
+    if (tcsetattr(serial_port, TCSANOW, &tty) != 0)
+    {
+        perror("Error al configurar el puerto serial");
+        close(serial_port);
+        return 1;
+    }
+
+    // Enviar datos
+    char message[] = "TOLEDO\n";
+    int message_len = sizeof(message) - 1;
+    int bytes_written = write(serial_port, message, message_len);
+
+    if (bytes_written < 0)
+    {
+        perror("Error al escribir en el puerto serial");
+        close(serial_port);
+        return 1;
+    }
+
+    printf("Mensaje enviado: %s", message);
+
+    close(serial_port);
     return 0;
 }
