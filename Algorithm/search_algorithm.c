@@ -5,20 +5,12 @@
 #include <mpi.h>
 #include "search_algorithm.h"
 
-#define HASH_SIZE 10000
-
 // Helper function to make a word lowercase
 void toLowercase(char *str) {
     for (int i = 0; str[i]; i++) {
         str[i] = tolower(str[i]);
     }
 }
-
-// Structure for word frequency
-typedef struct {
-    char word[MAX_WORD_LEN];
-    int count;
-} WordFreq;
 
 WordFreq *hashTable[HASH_SIZE];
 
