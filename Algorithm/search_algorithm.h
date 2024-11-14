@@ -9,6 +9,8 @@
 #define MAX_WORD_LEN 256
 // Define the hash table size for word frequencies
 #define HASH_SIZE 10000
+//Define the location of the txt
+#define FILENAME "el_quijote.txt" 
 
 // Structure to store each word and its frequency
 typedef struct {
@@ -67,5 +69,7 @@ void addWordToGlobalHash(WordFreq *globalHashTable, const char *word, int count)
  * @return An array of strings where each entry is a part of the file.
  */
 char **splitFileToStrings(const char *filename, int numParts, int *outPartSizes);
+
+void cleanupHashTable();
 
 #endif // SEARCH_ALGORITHM_H

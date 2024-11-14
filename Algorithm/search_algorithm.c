@@ -152,6 +152,17 @@ char **splitFileToStrings(const char *filename, int size, int *outPartSizes) {
     return partsArray;
 }
 
+// Limpia la tabla hash liberando la memoria de cada entrada
+void cleanupHashTable() {
+    for (int i = 0; i < HASH_SIZE; i++) {
+        if (hashTable[i] != NULL) {
+            free(hashTable[i]);
+            hashTable[i] = NULL;
+        }
+    }
+}
+
+
 int main(int argc, char *argv[]) {
     int rank, size;
 
