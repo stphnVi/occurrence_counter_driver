@@ -7,10 +7,10 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(OpenSSL REQUIRED)
 
 # Add the executable
-add_executable(Encryption main.c)
+add_executable(Encryption main.c encryption.c)
 
-# Include the OpenSSL headers
-target_include_directories(Encryption PRIVATE ${OPENSSL_INCLUDE_DIR})
+# Include directories for OpenSSL and your header files
+target_include_directories(Encryption PRIVATE ${OPENSSL_INCLUDE_DIR} ${CMAKE_SOURCE_DIR})
 
 # Link OpenSSL libraries (ssl and crypto)
 target_link_libraries(Encryption PRIVATE OpenSSL::SSL OpenSSL::Crypto)

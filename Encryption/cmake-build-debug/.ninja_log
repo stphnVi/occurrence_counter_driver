@@ -1,3 +1,10 @@
 # ninja log v6
-0	104	1731579927038985004	CMakeFiles/Encryption.dir/main.c.o	8ccb00c040d4d6a5
 104	164	1731579927145652465	Encryption	1e243ea39eeaca84
+1	194	1731626002218291899	CMakeFiles/Encryption.dir/main.c.o	8ccb00c040d4d6a5
+10	65	1731626095761624852	build.ninja	d6cf5ac5041b7546
+1	76	1731626099111744221	CMakeFiles/Encryption.dir/main.c.o	dbf88354a123a242
+1	73	1731626159897243487	CMakeFiles/Encryption.dir/main.c.o	dbf88354a123a242
+1	100	1731626164927422728	CMakeFiles/Encryption.dir/main.c.o	dbf88354a123a242
+0	77	1731626474595124592	CMakeFiles/Encryption.dir/main.c.o	dbf88354a123a242
+1	91	1731626474595124592	CMakeFiles/Encryption.dir/encryption.c.o	5ad41c0f553df0fe
+91	161	1731626474685127800	Encryption	a129e613eb7fa2d7
