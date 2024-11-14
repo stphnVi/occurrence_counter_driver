@@ -1,63 +1,58 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <termios.h>
-#include <errno.h>
+#include "display.h"
 
-int configurar_uart(const char *puerto_uart)
-{
-    int uart_fd = open(puerto_uart, O_RDWR | O_NOCTTY | O_NDELAY);
-    if (uart_fd == -1)
-    {
-        perror("Error abriendo el UART");
-        return -1;
-    }
+#define DEVICE "/dev/ttyAMA0"
+#define BAUDRATE B9600
+#define BUFFER_SIZE 256
 
-    struct termios opciones;
-    tcgetattr(uart_fd, &opciones);
-    cfsetispeed(&opciones, B9600);
-    cfsetospeed(&opciones, B9600);
-    opciones.c_cflag |= (CLOCAL | CREAD);
-    opciones.c_cflag &= ~PARENB;
-    opciones.c_cflag &= ~CSTOPB;
-    opciones.c_cflag &= ~CSIZE;
-    opciones.c_cflag |= CS8;
-    opciones.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
-    opciones.c_iflag &= ~(IXON | IXOFF | IXANY);
-    opciones.c_oflag &= ~OPOST;
-    tcsetattr(uart_fd, TCSANOW, &opciones);
-
-    return uart_fd;
-}
-
-int main()
-{
-    const char *puerto = "/dev/serial0"; // Puerto UART en Raspberry Pi
-    int uart_fd = configurar_uart(puerto);
-    if (uart_fd == -1)
-    {
+int main() {
+    int serial_port = open(DEVICE, O_RDONLY);
+    if (serial_port < 0) {
+        perror("Error al abrir el puerto serial");
         return 1;
     }
 
-    char buffer[256];
-    memset(buffer, 0, sizeof(buffer));
+    struct termios tty;
+    if (tcgetattr(serial_port, &tty) != 0) {
+        perror("Error al obtener los atributos del puerto serial");
+        close(serial_port);
+        return 1;
+    }
 
-    while (1)
-    {
-        int bytes_recibidos = read(uart_fd, buffer, sizeof(buffer) - 1);
-        if (bytes_recibidos < 0)
-        {
-            perror("Error recibiendo mensaje");
-            close(uart_fd);
-            return 1;
-        }
-        else
-        {
+    cfsetospeed(&tty, BAUDRATE);
+    cfsetispeed(&tty, BAUDRATE);
+    tty.c_cflag &= ~PARENB;
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;
+    tty.c_cflag |= CREAD | CLOCAL;
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+    tty.c_iflag &= ~(ICANON | ECHO | ECHOE | ISIG);
+    tty.c_oflag &= ~OPOST;
+
+    if (tcsetattr(serial_port, TCSANOW, &tty) != 0) {
+        perror("Error al configurar el puerto serial");
+        close(serial_port);
+        return 1;
+    }
+
+    init_display();
+
+    char buffer[BUFFER_SIZE];
+    int bytes_read;
+    while (1) {
+        bytes_read = read(serial_port, buffer, sizeof(buffer) - 1);
+        if (bytes_read > 0) {
+            buffer[bytes_read] = '\0';
             printf("Mensaje recibido: %s\n", buffer);
+            animate_text(buffer);  // Llama a animate_text con el mensaje recibido
         }
     }
-    close(uart_fd);
+
+    close(serial_port);
     return 0;
 }
