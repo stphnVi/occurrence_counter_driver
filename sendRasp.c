@@ -4,10 +4,19 @@
 #include <unistd.h>
 #include <termios.h>
 #include <string.h>
+#include <ctype.h>
 #include "sendRasp.h"
 
 #define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora
 #define BAUDRATE B9600               // baudios
+
+
+/***********************************************
+ *                 DIBUJAR                     *
+ * Envia un mensaje a la Raspberry Pi para ser *
+ * dibujado en la matriz de leds 8x8           *
+ ***********************************************/
+
 
 int draw(const char *message)
 {
@@ -62,4 +71,29 @@ int draw(const char *message)
 
     close(serial_port);
     return 0;
+}
+
+
+/***********************************************
+ *            FORMATEAR EL STRING              *
+ * Convierte todas las letras a mayúsculas,    *
+ * deja los números intactos y asegura que el  *
+ * string termine con un salto de línea (\n).  *
+ ***********************************************/
+
+const char *parseString(const char *input) {
+    static char buffer[256]; // Buffer estático para almacenar el resultado
+    size_t i = 0;
+
+    for (; input[i] != '\0' && i < sizeof(buffer) - 2; i++) {
+        if (input[i] >= 'a' && input[i] <= 'z') {
+            buffer[i] = input[i] - 'a' + 'A'; // Convertir a mayúscula
+        } else {
+            buffer[i] = input[i]; // Mantener el carácter original
+        }
+    }
+    buffer[i++] = '\n';  // Agregar salto de línea
+    buffer[i] = '\0';    // Terminar el string
+
+    return buffer; // Devolver el puntero al buffer
 }
