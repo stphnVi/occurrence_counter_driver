@@ -3,11 +3,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <termios.h>
+#include <string.h>
+#include "sendRasp.h"
 
 #define DEVICE "/dev/ttyRaspberryPi" // Puerto serial de la computadora
 #define BAUDRATE B9600               // baudios
 
-int draw(char[] message)
+int draw(const char *message)
 {
     int serial_port = open(DEVICE, O_RDWR);
 
@@ -46,7 +48,7 @@ int draw(char[] message)
     }
 
     // Enviar datos
-    int message_len = sizeof(message) - 1;
+    int message_len = strlen(message);
     int bytes_written = write(serial_port, message, message_len);
 
     if (bytes_written < 0)

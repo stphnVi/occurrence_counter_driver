@@ -1,6 +1,8 @@
-#include "sendRasp.c"
+#include "sendRasp.h"
+#include <stdio.h>
 
-int main(){
-    draw("TOLEBRIO");
+int main()
+{
+    draw("TOLEBRIO\n");
     return 0;
 }
