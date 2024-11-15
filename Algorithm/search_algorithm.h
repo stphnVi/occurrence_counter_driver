@@ -14,7 +14,7 @@
 void countWords(char *buffer, char words[][WORD_LENGTH], int counts[]);
 
 // Declaración de la función para dividir el archivo en partes
-void splitFileToParts(const char *filename, char **buffer, int *buffer_size, int rank);
+void splitFileToParts(const char *filename, char **buffer, int *buffer_size, int rank, int num_processes);
 
 // Declaración de la función para encontrar la palabra más frecuente
 void findMostFrequent(char words[][WORD_LENGTH], int counts[], char *most_frequent, int *max_count);
