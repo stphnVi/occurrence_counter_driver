@@ -3,6 +3,8 @@
 
 int main()
 {
+    char* string = parseString("hola1");
+    printf("Resultado: %s\n", string);
     draw("TOLEBRIO\n");
     return 0;
 }
