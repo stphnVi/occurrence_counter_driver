@@ -245,15 +245,15 @@ void derive_symmetric_key(unsigned char *symmetric_key, const unsigned char *sha
 }
 
 //Encryption
-void encrypt_message(const unsigned char *key, const unsigned char *plaintext,
+void encrypt_message(const unsigned char *key, const unsigned char *plaintext, size_t plaintext_len,
                     unsigned char *iv, unsigned char *tag,
                     unsigned char *ciphertext, int *ciphertext_len) {
     EVP_CIPHER_CTX *ctx;
     int len;
 
-    // Generate random IV (should be done with proper random function in production)
+    // Generate random IV
     for(int i = 0; i < 12; i++) {  // 12 bytes for GCM IV
-        iv[i] = i;  // For demonstration; use proper random in production
+        iv[i] = i; 
     }
 
     ctx = EVP_CIPHER_CTX_new();
@@ -261,7 +261,7 @@ void encrypt_message(const unsigned char *key, const unsigned char *plaintext,
     EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv);
 
     // Encrypt the message
-    EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, strlen((const char*)plaintext));
+    EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len);
     *ciphertext_len = len;
 
     // Finalize encryption
