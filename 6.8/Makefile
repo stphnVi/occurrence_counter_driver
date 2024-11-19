@@ -1,5 +1,5 @@
 obj-m = raspberryusb.o
-raspberryusb-objs = ftdi_sio.o
+raspberryusb-objs = our_driver.o
 KVERSION = $(shell uname -r)
 all:
 	make -C /lib/modules/$(KVERSION)/build M=$(shell pwd) modules
