@@ -22,4 +22,6 @@ int main()
  * 1. Compilar: gcc -c sendRasp.c -o sendRasp.o
  * 2. Crear biblioteca estatica: ar rcs libSendRasp.a sendRasp.o
  * 
+ * test serial port
+ * gcc -o t testLib.c sendRasp.c ./t
  */
