@@ -118,10 +118,17 @@ int main(int argc, char **argv) {
             MPI_Send(buffer, buffer_size, MPI_CHAR, i, 0, MPI_COMM_WORLD);
         }
     } else {
+
+        printf("Prueba1");
         // Los esclavos reciben su parte del archivo
         MPI_Recv(&buffer_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         buffer = (char *)malloc(buffer_size);
         MPI_Recv(buffer, buffer_size, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        countWords(buffer, local_words, local_counts);
+
+        MPI_Send(local_words, NUM_WORDS * WORD_LENGTH, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
+        MPI_Send(local_counts, NUM_WORDS, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
 
     // Contadores y palabras locales
