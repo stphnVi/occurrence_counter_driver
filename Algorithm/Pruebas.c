@@ -88,23 +88,35 @@ void splitFileForProcesses(const char *filename, char ***buffers, int **buffer_s
 
     fseek(file, 0, SEEK_SET);
 
-    // Calcular el tamaño de cada parte
-    long part_size = file_size / num_processes;
+    // Calcular el tamaño base de cada parte
+    long base_part_size = file_size / num_processes;
     *buffers = (char **)malloc(num_processes * sizeof(char *));
     *buffer_sizes = (int *)malloc(num_processes * sizeof(int));
 
+    long current_offset = 0;
     for (int i = 0; i < num_processes; i++) {
-        (*buffer_sizes)[i] = (i == num_processes - 1) ? (file_size - part_size * (num_processes - 1)) : part_size;
-        (*buffers)[i] = (char *)malloc((*buffer_sizes)[i]);
+        // Estimar el tamaño inicial de la parte
+        long part_size = (i == num_processes - 1) ? (file_size - current_offset) : base_part_size;
+
+        // Ajustar para no partir palabras
+        fseek(file, current_offset + part_size - 1, SEEK_SET);
+        int c = fgetc(file);
+        while (c != EOF && !isspace(c)) {
+            part_size++;
+            c = fgetc(file);
+        }
+
+        // Leer el buffer ajustado
+        (*buffer_sizes)[i] = part_size;
+        (*buffers)[i] = (char *)malloc(part_size + 1);
         if ((*buffers)[i] == NULL) {
             perror("Error al asignar memoria para buffer");
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
 
-        // Leer la parte del archivo correspondiente a cada proceso
-        fseek(file, part_size * i, SEEK_SET);
-        size_t read_size = fread((*buffers)[i], 1, (*buffer_sizes)[i], file);
-        if (read_size == 0) {
+        fseek(file, current_offset, SEEK_SET);
+        size_t read_size = fread((*buffers)[i], 1, part_size, file);
+        if (read_size < part_size) {
             printf("Error al leer el archivo.\n");
             for (int j = 0; j <= i; j++) {
                 free((*buffers)[j]);
@@ -113,10 +125,17 @@ void splitFileForProcesses(const char *filename, char ***buffers, int **buffer_s
             free(*buffer_sizes);
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
+
+        // Asegurarse de que el buffer esté terminado como cadena
+        (*buffers)[i][read_size] = '\0';
+
+        // Actualizar el offset para la siguiente parte
+        current_offset += part_size;
     }
 
     fclose(file);
 }
+
 // Función para encontrar la palabra más frecuente
 void findMostFrequent(char words[][WORD_LENGTH], int counts[], char *most_frequent, int *max_count) {
     *max_count = 0;
