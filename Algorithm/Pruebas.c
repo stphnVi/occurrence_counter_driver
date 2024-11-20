@@ -7,46 +7,41 @@
 #define NUM_WORDS 300     // Número máximo de palabras
 #define MAX_PART_SIZE 1024 // Tamaño máximo de cada parte
 
-// Función para contar palabras en una parte del texto
-void countWords(char *buffer, char words[][WORD_LENGTH], int counts[]) {
-    char word[WORD_LENGTH];
-    int index = 0, offset = 0;
-    memset(words, 0, sizeof(words[0]) * NUM_WORDS);
-    memset(counts, 0, sizeof(counts[0]) * NUM_WORDS);
+void countWords(char *buffer, char words[NUM_WORDS][WORD_LENGTH], int counts[NUM_WORDS]) {
+    int num_words = 0;
+    char *token = strtok(buffer, " \n\t.,!?;:\"()[]{}"); // Tokeniza por espacios y puntuación
 
-    while (sscanf(buffer + offset, "%23s%n", word, &index) == 1) {
+    while (token != NULL && num_words < NUM_WORDS) {
+        // Buscar si la palabra ya está en la lista
         int found = 0;
-        for (int i = 0; i < NUM_WORDS; i++) {
-            if (strcmp(words[i], word) == 0) {
+        for (int i = 0; i < num_words; i++) {
+            if (strcmp(words[i], token) == 0) {
                 counts[i]++;
                 found = 1;
                 break;
             }
-            if (strlen(words[i]) == 0) {
-                strcpy(words[i], word);
-                counts[i] = 1;
-                found = 1;
-                break;
-            }
-        }
-        if (!found) {;
         }
 
-        offset += index;
-        if (offset >= strlen(buffer)) break;
+        // Si no está, añadirla
+        if (!found) {
+            strncpy(words[num_words], token, WORD_LENGTH - 1);
+            words[num_words][WORD_LENGTH - 1] = '\0'; // Garantizar terminación nula
+            counts[num_words] = 1;
+            num_words++;
+        }
+
+        token = strtok(NULL, " \n\t.,!?;:\"()[]{}");
     }
 }
 
-// Función para dividir el archivo y devolver las partes
-void splitFileToParts(const char *filename, char **buffer, int *buffer_size, int rank, int num_processes) {
+void splitFileForProcesses(const char *filename, char ***buffers, int **buffer_sizes, int rank, int num_processes) {
     FILE *file = fopen(filename, "r");
     if (!file) {
-        if (rank == 0) {
-            perror("Error al abrir el archivo");
-        }
+        perror("Error al abrir el archivo");
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
+    // Obtener el tamaño total del archivo
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     if (file_size <= 0) {
@@ -58,24 +53,33 @@ void splitFileToParts(const char *filename, char **buffer, int *buffer_size, int
 
     fseek(file, 0, SEEK_SET);
 
-    // Dividir el archivo en partes
+    // Calcular el tamaño de cada parte
     long part_size = file_size / num_processes;
-    *buffer_size = (rank == num_processes - 1) ? (file_size - part_size * (num_processes - 1)) : part_size;
+    *buffers = (char **)malloc(num_processes * sizeof(char *));
+    *buffer_sizes = (int *)malloc(num_processes * sizeof(int));
 
-    *buffer = (char *)malloc(*buffer_size);
-    if (*buffer == NULL) {
-        perror("Error al asignar memoria para buffer");
-        MPI_Abort(MPI_COMM_WORLD, 1);
-    }
-
-    fseek(file, part_size * rank, SEEK_SET);
-    size_t read_size = fread(*buffer, 1, *buffer_size, file);
-    if (read_size == 0) {
-        if (rank == 0) {
-            printf("Error al leer el archivo.\n");
+    for (int i = 0; i < num_processes; i++) {
+        (*buffer_sizes)[i] = (i == num_processes - 1) ? (file_size - part_size * (num_processes - 1)) : part_size;
+        (*buffers)[i] = (char *)malloc((*buffer_sizes)[i]);
+        if ((*buffers)[i] == NULL) {
+            perror("Error al asignar memoria para buffer");
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
-        free(*buffer);
-        MPI_Abort(MPI_COMM_WORLD, 1);
+
+        // Leer la parte del archivo correspondiente a cada proceso
+        fseek(file, part_size * i, SEEK_SET);
+        size_t read_size = fread((*buffers)[i], 1, (*buffer_sizes)[i], file);
+        if (read_size == 0) {
+            if (rank == 0) {
+                printf("Error al leer el archivo.\n");
+            }
+            for (int j = 0; j <= i; j++) {
+                free((*buffers)[j]);
+            }
+            free(*buffers);
+            free(*buffer_sizes);
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
     }
 
     fclose(file);
@@ -92,84 +96,120 @@ void findMostFrequent(char words[][WORD_LENGTH], int counts[], char *most_freque
     }
 }
 
+static int mergeCounts_calls = 0; // Contador global de llamadas
+
+void mergeCounts(char global_words[][WORD_LENGTH], int global_counts[], 
+                 char local_words[][WORD_LENGTH], int local_counts[]) {
+    mergeCounts_calls++;
+    printf("mergeCounts llamada #%d\n", mergeCounts_calls);
+
+    for (int i = 0; i < NUM_WORDS; i++) {
+        if (strlen(local_words[i]) == 0) continue;
+
+        int found = 0;
+        for (int j = 0; j < NUM_WORDS; j++) {
+            if (strcmp(global_words[j], local_words[i]) == 0) {
+                global_counts[j] += local_counts[i];
+                found = 1;
+                break;
+            }
+        }
+
+        if (!found) {
+            for (int j = 0; j < NUM_WORDS; j++) {
+                if (strlen(global_words[j]) == 0) {
+                    strcpy(global_words[j], local_words[i]);
+                    global_counts[j] = local_counts[i];
+                    break;
+                }
+            }
+        }
+    }
+}
+
 int main(int argc, char **argv) {
+    // Inicializar MPI
     MPI_Init(&argc, &argv);
 
-    int rank, size;
+    int rank, num_processes;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_size(MPI_COMM_WORLD, &num_processes);
 
-    if (argc < 2) {
-        if (rank == 0) printf("Uso: mpirun -np <num_procesos> ./programa <archivo_texto>\n");
+    if (argc != 2) {
+        if (rank == 0) {
+            printf("Uso: %s <nombre_archivo>\n", argv[0]);
+        }
         MPI_Abort(MPI_COMM_WORLD, 1);
     }
 
-    const char *filename = argv[1];  // Archivo de texto pasado como argumento
-    int buffer_size = 0;             // Tamaño del buffer para los procesos
-    char *buffer = NULL;             // Puntero al buffer de texto
+    const char *filename = argv[1];
+    char **buffers = NULL;
+    int *buffer_sizes = NULL;
 
-    // El proceso maestro lee su parte del archivo
-    if (rank == 0) {
-        splitFileToParts(filename, &buffer, &buffer_size, rank, size);
-
-        // Luego, el maestro envía su parte a todos los esclavos
-        for (int i = 1; i < size; i++) {
-            MPI_Send(&buffer_size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-            MPI_Send(buffer, buffer_size, MPI_CHAR, i, 0, MPI_COMM_WORLD);
-        }
-    } else {
-        // Los esclavos reciben su parte del archivo
-        MPI_Recv(&buffer_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        buffer = (char *)malloc(buffer_size);
-        MPI_Recv(buffer, buffer_size, MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
+    // Llamada a splitFileForProcesses para dividir el archivo en partes entre los procesos
+    splitFileForProcesses(filename, &buffers, &buffer_sizes, rank, num_processes);
 
     // Contadores y palabras locales
-    char local_words[NUM_WORDS][WORD_LENGTH];
-    int local_counts[NUM_WORDS];
+    char local_words[NUM_WORDS][WORD_LENGTH] = {0};
+    int local_counts[NUM_WORDS] = {0};
 
     // Imprimir qué parte del archivo está manejando cada proceso
-    printf("Proceso %d está manejando el rango %d - %d de %s\n", rank, rank * buffer_size, (rank + 1) * buffer_size, filename);
+    printf("Proceso %d está manejando el rango %d - %d de %s\n", rank, rank * buffer_sizes[rank], (rank + 1) * buffer_sizes[rank], filename);
 
-    countWords(buffer, local_words, local_counts);
+    countWords(buffers[rank], local_words, local_counts);
 
-    // El proceso maestro recogerá los resultados de todos los procesos
     if (rank == 0) {
-        // Matrices para almacenar las palabras y los contadores de todos los procesos
-        char global_words[size][NUM_WORDS][WORD_LENGTH];
-        int global_counts[size][NUM_WORDS];
-        memset(global_counts, 0, sizeof(global_counts)); // Inicializar a cero
+        char global_words[NUM_WORDS][WORD_LENGTH] = {0};
+        int global_counts[NUM_WORDS] = {0};
 
-        // Copiar los resultados del proceso 0 a su propia matriz
-        memcpy(global_words[0], local_words, sizeof(local_words));
-        memcpy(global_counts[0], local_counts, sizeof(local_counts));
-
-        // Recibir los resultados de los otros procesos
-        for (int i = 1; i < size; i++) {
-            MPI_Recv(global_words[i], NUM_WORDS * WORD_LENGTH, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(global_counts[i], NUM_WORDS, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        printf("Proceso %d envió:\n", rank);
+        for (int k = 0; k < NUM_WORDS; k++) {
+            if (strlen(local_words[k]) > 0) {
+                printf("Palabra: %s, Cuenta: %d\n", local_words[k], local_counts[k]);
+            }
         }
 
-        // Encontrar la palabra más frecuente utilizando la función findMostFrequent
+        mergeCounts(global_words, global_counts, local_words, local_counts);
+
+        for (int i = 1; i < num_processes; i++) {
+            char received_words[NUM_WORDS][WORD_LENGTH] = {0};
+            int received_counts[NUM_WORDS] = {0};
+
+            // Recibir las palabras y los conteos
+            MPI_Recv(received_words, NUM_WORDS * WORD_LENGTH, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(received_counts, NUM_WORDS, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            // Imprimir las palabras recibidas para depuración
+            printf("Proceso %d envió:\n", i);
+            for (int k = 0; k < NUM_WORDS; k++) {
+                if (strlen(received_words[k]) > 0) {
+                    printf("Palabra: %s, Cuenta: %d\n", received_words[k], received_counts[k]);
+                }
+            }
+
+            // Combinar los resultados globales
+            mergeCounts(global_words, global_counts, received_words, received_counts);
+        }
+
         char most_frequent[WORD_LENGTH];
-        int max_count = 0;
+        int max_count;
+        findMostFrequent(global_words, global_counts, most_frequent, &max_count);
 
-        // Procesamos las palabras recibidas
-        for (int i = 0; i < size; i++) {
-            findMostFrequent(global_words[i], global_counts[i], most_frequent, &max_count);
-        }
-
-        // Mostrar la palabra más frecuente
         printf("Palabra más frecuente: '%s' (Aparece %d veces)\n", most_frequent, max_count);
     } else {
-        // Enviar los resultados del proceso no maestro al maestro
         MPI_Send(local_words, NUM_WORDS * WORD_LENGTH, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
         MPI_Send(local_counts, NUM_WORDS, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
 
-    // Liberar memoria del buffer
-    free(buffer);
+    // Liberar memoria
+    for (int i = 0; i < num_processes; i++) {
+        free(buffers[i]);
+    }
+    free(buffers);
+    free(buffer_sizes);
 
+    // Finalizar MPI
     MPI_Finalize();
+
     return 0;
 }

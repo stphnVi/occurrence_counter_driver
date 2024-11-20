@@ -140,39 +140,32 @@ int main(int argc, char **argv) {
 
     countWords(buffer, local_words, local_counts);
 
-    // El proceso maestro recogerá los resultados de todos los procesos
     if (rank == 0) {
-        // Matrices para almacenar las palabras y los contadores de todos los procesos
-        char global_words[size][NUM_WORDS][WORD_LENGTH];
-        int global_counts[size][NUM_WORDS];
-        memset(global_counts, 0, sizeof(global_counts)); // Inicializar a cero
+        char global_words[NUM_WORDS][WORD_LENGTH] = {0};
+        int global_counts[NUM_WORDS] = {0};
 
-        // Copiar los resultados del proceso 0 a su propia matriz
-        memcpy(global_words[0], local_words, sizeof(local_words));
-        memcpy(global_counts[0], local_counts, sizeof(local_counts));
+        mergeCounts(global_words, global_counts, local_words, local_counts);
 
-        // Recibir los resultados de los otros procesos
         for (int i = 1; i < size; i++) {
-            MPI_Recv(global_words[i], NUM_WORDS * WORD_LENGTH, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(global_counts[i], NUM_WORDS, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            char received_words[NUM_WORDS][WORD_LENGTH];
+            int received_counts[NUM_WORDS];
+
+            MPI_Recv(received_words, NUM_WORDS * WORD_LENGTH, MPI_CHAR, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(received_counts, NUM_WORDS, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            mergeCounts(global_words, global_counts, received_words, received_counts);
         }
 
-        // Encontrar la palabra más frecuente utilizando la función findMostFrequent
         char most_frequent[WORD_LENGTH];
-        int max_count = 0;
+        int max_count;
+        findMostFrequent(global_words, global_counts, most_frequent, &max_count);
 
-        // Procesamos las palabras recibidas
-        for (int i = 0; i < size; i++) {
-            findMostFrequent(global_words[i], global_counts[i], most_frequent, &max_count);
-        }
-
-        // Mostrar la palabra más frecuente
         printf("Palabra más frecuente: '%s' (Aparece %d veces)\n", most_frequent, max_count);
     } else {
-        // Enviar los resultados del proceso no maestro al maestro
         MPI_Send(local_words, NUM_WORDS * WORD_LENGTH, MPI_CHAR, 0, 0, MPI_COMM_WORLD);
         MPI_Send(local_counts, NUM_WORDS, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
+
 
     // Liberar memoria del buffer
     free(buffer);
