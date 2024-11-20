@@ -3,36 +3,73 @@
 #include <mpi.h>
 #include <string.h>
 
+#include "encryption.h"
+//#include "sendRasp.h"
+
+//Alice secret key
+unsigned char alicesk[32] = {
+ 0x77,0x07,0x6d,0x0a,0x73,0x18,0xa5,0x7d
+,0x3c,0x16,0xc1,0x72,0x51,0xb2,0x66,0x45
+,0xdf,0x4c,0x2f,0x87,0xeb,0xc0,0x99,0x2a
+,0xb1,0x77,0xfb,0xa5,0x1d,0xb9,0x2c,0x2a
+};
+//Alice public key
+unsigned char alicepk[32] = {
+ 0x85,0x20,0xf0,0x09,0x89,0x30,0xa7,0x54
+,0x74,0x8b,0x7d,0xdc,0xb4,0x3e,0xf7,0x5a
+,0x0d,0xbf,0x3a,0x0d,0x26,0x38,0x1a,0xf4
+,0xeb,0xa4,0xa9,0x8e,0xaa,0x9b,0x4e,0x6a
+} ;
+
+//Bob secret key
+unsigned char bobsk[32] = {
+ 0x5d,0xab,0x08,0x7e,0x62,0x4a,0x8a,0x4b
+,0x79,0xe1,0x7f,0x8b,0x83,0x80,0x0e,0xe6
+,0x6f,0x3b,0xb1,0x29,0x26,0x18,0xb6,0xfd
+,0x1c,0x2f,0x8b,0x27,0xff,0x88,0xe0,0xeb
+} ;
+//Bob public key
+unsigned char bobpk[32] = {
+ 0xde,0x9e,0xdb,0x7d,0x7b,0x7d,0xc1,0xb4
+,0xd3,0x5b,0x61,0xc2,0xec,0xe4,0x35,0x37
+,0x3f,0x83,0x43,0xc8,0x5b,0x78,0x67,0x4d
+,0xad,0xfc,0x7e,0x14,0x6f,0x88,0x2b,0x4f
+} ;
+
 #define WORD_LENGTH 24    // Tamaño máximo de palabra
-#define NUM_WORDS 300     // Número máximo de palabras
-#define MAX_PART_SIZE 1024 // Tamaño máximo de cada parte
+#define NUM_WORDS 500     // Número máximo de palabras
+#define MAX_PART_SIZE 5,120 // Tamaño máximo de cada parte
 
-void countWords(char *buffer, char words[NUM_WORDS][WORD_LENGTH], int counts[NUM_WORDS]) {
-    int num_words = 0;
-    char *token = strtok(buffer, " \n\t.,!?;:\"()[]{}"); // Tokeniza por espacios y puntuación
+void countWords(char *buffer, char words[][WORD_LENGTH], int counts[]) {
+    char word[WORD_LENGTH];
+    int index = 0, offset = 0;
+    memset(words, 0, sizeof(words[0]) * NUM_WORDS);
+    memset(counts, 0, sizeof(counts[0]) * NUM_WORDS);
 
-    while (token != NULL && num_words < NUM_WORDS) {
-        // Buscar si la palabra ya está en la lista
+    while (sscanf(buffer + offset, "%23s%n", word, &index) == 1) {
         int found = 0;
-        for (int i = 0; i < num_words; i++) {
-            if (strcmp(words[i], token) == 0) {
+        for (int i = 0; i < NUM_WORDS; i++) {
+            if (strcmp(words[i], word) == 0) {
                 counts[i]++;
                 found = 1;
                 break;
             }
+            if (strlen(words[i]) == 0) {
+                strcpy(words[i], word);
+                counts[i] = 1;
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {;
         }
 
-        // Si no está, añadirla
-        if (!found) {
-            strncpy(words[num_words], token, WORD_LENGTH - 1);
-            words[num_words][WORD_LENGTH - 1] = '\0'; // Garantizar terminación nula
-            counts[num_words] = 1;
-            num_words++;
-        }
-
-        token = strtok(NULL, " \n\t.,!?;:\"()[]{}");
+        offset += index;
+        if (offset >= strlen(buffer)) break;
     }
 }
+
+
 
 void splitFileForProcesses(const char *filename, char ***buffers, int **buffer_sizes, int num_processes) {
     FILE *file = fopen(filename, "r");
@@ -148,6 +185,18 @@ int main(int argc, char **argv) {
     buffers = (char **)malloc(num_processes * sizeof(char *));
     buffer_sizes = (int *)malloc(num_processes * sizeof(int));
 
+    //Generation of shared secret and symmetric key
+    unsigned char alice_shared_secret[32], bob_shared_secret[32], symmetric_key[32];
+
+    generate_shared_secret(alice_shared_secret, alicesk, bobpk);
+    generate_shared_secret(bob_shared_secret, alicesk, bobpk);
+
+    //Derive symmetric keys
+    unsigned char alice_key[32], bob_key[32];
+
+    derive_symmetric_key(alice_key, alice_shared_secret);
+    derive_symmetric_key(bob_key, bob_shared_secret);
+
     if (buffers == NULL || buffer_sizes == NULL) {
         fprintf(stderr, "Error al asignar memoria para buffers o buffer_sizes\n");
         MPI_Abort(MPI_COMM_WORLD, 1);
@@ -157,34 +206,49 @@ int main(int argc, char **argv) {
     if (rank == 0) {
         splitFileForProcesses(filename, &buffers, &buffer_sizes, num_processes);
 
-        // Enviar las partes del archivo a los procesos 1, 2, ..., num_processes-1
         for (int i = 1; i < num_processes; i++) {
-            // Enviar el tamaño del buffer al proceso i
-            MPI_Send(&buffer_sizes[i], 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-            // Enviar el contenido del buffer al proceso i
-            MPI_Send(buffers[i], buffer_sizes[i], MPI_CHAR, i, 0, MPI_COMM_WORLD);
-        }
+            int max_ciphertext_len = buffer_sizes[i] + 64;
+            unsigned char *ciphertext = malloc(max_ciphertext_len);
+            unsigned char iv[12], tag[16];
+            int ciphertext_len = 0;
 
+            if (!ciphertext) {
+                fprintf(stderr, "Memory allocation failed for ciphertext\n");
+                MPI_Abort(MPI_COMM_WORLD, 1);
+            }
+
+            encrypt_message(alice_key, (unsigned char*)buffers[i], buffer_sizes[i], 
+                            iv, tag, ciphertext, &ciphertext_len);
+
+            MPI_Send(&ciphertext_len, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+            MPI_Send(&buffer_sizes[i], 1, MPI_INT, i, 4, MPI_COMM_WORLD); // Enviar tamaño original
+            MPI_Send(iv, 12, MPI_UNSIGNED_CHAR, i, 1, MPI_COMM_WORLD);
+            MPI_Send(tag, 16, MPI_UNSIGNED_CHAR, i, 2, MPI_COMM_WORLD);
+            MPI_Send(ciphertext, ciphertext_len, MPI_CHAR, i, 3, MPI_COMM_WORLD);
+
+            free(ciphertext);
+        }
     } else {
-        // Recibir el tamaño del buffer
-        MPI_Recv(&buffer_sizes[rank], 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int ciphertext_len;
+        MPI_Recv(&ciphertext_len, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&buffer_sizes[rank], 1, MPI_INT, 0, 4, MPI_COMM_WORLD, MPI_STATUS_IGNORE); // Recibir tamaño original
 
-        // Asignar memoria para el buffer del proceso actual
-        buffers[rank] = (char *)malloc(buffer_sizes[rank]);
-        if (buffers[rank] == NULL) {
-            fprintf(stderr, "Error al asignar memoria para el buffer en proceso %d\n", rank);
-            MPI_Abort(MPI_COMM_WORLD, 1);
-        }
+        unsigned char iv[12], tag[16];
+        unsigned char *ciphertext = malloc(ciphertext_len);
 
-        // Recibir los datos del proceso 0
-        MPI_Recv(buffers[rank], buffer_sizes[rank], MPI_CHAR, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(iv, 12, MPI_UNSIGNED_CHAR, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(tag, 16, MPI_UNSIGNED_CHAR, 0, 2, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(ciphertext, ciphertext_len, MPI_CHAR, 0, 3, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        // Imprimir el contenido de los datos recibidos para depuración
-        printf("Proceso %d, Tamaño del buffer: %d\n", rank, buffer_sizes[rank]);
-        for (int i = 0; i < buffer_sizes[rank]; i++) {
-            printf("%c", buffers[rank][i]);
-        }
-        printf("\n"); // Imprimir el contenido del buffer
+        buffers[rank] = malloc(buffer_sizes[rank]);
+
+        unsigned char *decrypted = malloc(buffer_sizes[rank]);
+        decrypt_message(bob_key, iv, tag, ciphertext, ciphertext_len, decrypted);
+
+        memcpy(buffers[rank], decrypted, buffer_sizes[rank]);
+
+        free(ciphertext);
+        free(decrypted);
     }
 
     // Contadores y palabras locales
@@ -196,6 +260,12 @@ int main(int argc, char **argv) {
 
     // Contar las palabras en el buffer
     countWords(buffers[rank], local_words, local_counts);
+    printf("Proceso %d: Conteo de palabras locales:\n", rank);
+    for (int i = 0; i < NUM_WORDS; i++) {
+        if (local_counts[i] > 0) {
+            printf("Palabra: '%s', Conteo: %d\n", local_words[i], local_counts[i]);
+        }
+    }
 
     if (rank == 0) {
         char global_words[NUM_WORDS][WORD_LENGTH] = {0};
